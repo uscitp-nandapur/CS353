@@ -1,0 +1,5 @@
+connecting to server localhost at port 12345
+sending register message Zach
+received welcome
+sendto Alice hi
+terminating client...

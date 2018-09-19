@@ -1,0 +1,5 @@
+server started on localhost at port 12345
+client connection from host 127.0.0.1 port 58259
+received register Zach from host 127.0.0.1 port 58259
+sendto Alice from Zach hi
+terminating server...
