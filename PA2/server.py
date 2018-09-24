@@ -72,10 +72,24 @@ def spawn_thread(c, d, ca, file,handler):
             route_message(name, id, ' '.join(message), file, handler)
 
 
+def receive_TCP(sock):
+    # tcp connection (PA2)
+
+    sock.listen(5)  # Now wait for client connection.
+    print "hi"
+    print " Ready to accept the connections ! !"
+    connection, overlay_address = sock.accept()
+    print "Accepted!"
 
 
 def Main():
     parser = argparse.ArgumentParser(conflict_handler="resolve")
+    parser.add_argument("-s", "--serveroverlayIP",
+                        help="supply an ip address")
+    parser.add_argument("-t", "--serveroverlay", type=int,
+                        help="supply a port number to connect to")
+    parser.add_argument("-o", "--overlayport", type=int,
+                        help="supply a port number to connect to")
     parser.add_argument("-p", "--portno", type=int,
                         help="supply a port number to connect to")
     parser.add_argument("-l", "--logfile",
@@ -85,6 +99,11 @@ def Main():
     args = parser.parse_args()
 
     #assign variables to ports
+    if args.serveroverlayIP:
+        serveroverlayIP = args.serveroverlayIP
+    if args.serveroverlay:
+        serveroverlay=args.serveroverlay
+    overlayport=args.overlayport
     port = args.portno
     logfile = args.logfile
     handler = args.handler
@@ -95,22 +114,49 @@ def Main():
     f = open(logfile, "w+")
 
 
-    # start the server
+    # start the UDP server
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # Create a socket object
     s.bind((address, port))  # Bind to the port
     f.write("server started on " + address + " at port " + str(port) + '\n')
     f.flush()
 
+    # start the listening TCP Server (PA2)
+    o = socket.socket()  # Create a socket object
+    o_port = overlayport  # Reserve a port for your service.
+    o.bind((address, overlayport))  # Bind to the port
+    print "Binding completed  ! !"
+
+    #connect to the existing server
+    p = socket.socket()
+
+
+    if args.serveroverlayIP and args.serveroverlay:
+        print "hello"
+        p.connect((serveroverlayIP, serveroverlay))
+        print "Connected!"
+
+
+
     try:
         count = 0
         while (True):
             count += 1
+
+            r=threading.Thread(target=receive_TCP, args=(o,))
+            r.setDaemon(True)
+            r.start()
+
+            print "pre UDP"
             data, client_address = s.recvfrom(1024)
             tempsocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             tempsocket.bind((address, port + count))  # Bind to the port
 
+            print "Made it"
             # // after thread
             s.sendto(str(port + count), client_address)
+
+
+
 
             # send message back
             s.sendto("welcome " + str(data).split(" ")[1], client_address)
