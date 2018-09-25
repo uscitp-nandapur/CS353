@@ -13,8 +13,9 @@ print_lock = threading.Lock()
 user_map = {
 
 }
+tcp_sock_list = []
 
-def route_message(sender, receiver, message, fi, handler):
+def route_message(sender, receiver, message, fi, handler, socks):
     if handler == 1:
         #spawn new user
         if receiver not in user_map:
@@ -23,7 +24,6 @@ def route_message(sender, receiver, message, fi, handler):
             send_subp(new_logfile, receiver)
         #continue sending
         time.sleep(1)
-        print sender + " sending to " + receiver
         new_sock = user_map[receiver][0]
         new_message = "recvfrom " + sender + " " + message
         ca = user_map[receiver][1]
@@ -32,6 +32,7 @@ def route_message(sender, receiver, message, fi, handler):
     else:
         if receiver not in user_map:
             print receiver + " not registered with the server."
+            send_TCP(socks, sender, receiver, message, handler)
         else:
             new_sock = user_map[receiver][0]
             new_message = "recvfrom " + sender + " " + message
@@ -69,17 +70,47 @@ def spawn_thread(c, d, ca, file,handler):
             id = str(d).split(" ")[1]
             message = str(d).split(" ")[2:]
             file.write(str(d).split(" ")[0] + " " + id + " from " + name + " " + ' '.join(message) + '\n')
-            route_message(name, id, ' '.join(message), file, handler)
+            route_message(name, id, ' '.join(message), file, handler, tcp_sock_list)
 
 
-def receive_TCP(sock):
+def send_TCP(socks, sender, receiver, message, handler):
+    for sock in socks:
+        print "in sendTCP for loop"
+        print sock
+        sock.send("recvfrom " + sender + " to " + receiver + " " + message)
+
+def handle_TCP_outgoing(sock, handler,_file):
     # tcp connection (PA2)
 
     sock.listen(5)  # Now wait for client connection.
     print "hi"
     print " Ready to accept the connections ! !"
     connection, overlay_address = sock.accept()
+    tcp_sock_list.append(connection)
     print "Accepted!"
+    while True:
+        data = connection.recv(1024)
+        if (data):
+            if (str(data).split(" ")[0] == "recvfrom"):
+                print "received" + data
+                sender = str(data).split(" ")[1]
+                receiver = str(data).split(" ")[3]
+                message = str(data).split(" ")[4:]
+                #file.write(str(d).split(" ")[0] + " " + id + " from " + name + " " + ' '.join(message) + '\n')
+                route_message(sender, receiver, ' '.join(message), _file, handler, tcp_sock_list)
+
+
+def handle_TCP_incoming(sock, handler,_file):
+    while True:
+        data = sock.recv(1024)
+        if (data):
+            if (str(data).split(" ")[0] == "recvfrom"):
+                print "received" + data
+                sender = str(data).split(" ")[1]
+                receiver = str(data).split(" ")[3]
+                message = str(data).split(" ")[4:]
+                # file.write(str(d).split(" ")[0] + " " + id + " from " + name + " " + ' '.join(message) + '\n')
+                route_message(sender, receiver, ' '.join(message), _file, handler, tcp_sock_list)
 
 
 def Main():
@@ -130,21 +161,27 @@ def Main():
     p = socket.socket()
 
 
+
+
     if args.serveroverlayIP and args.serveroverlay:
-        print "hello"
+        print "Connecting to server..."
         p.connect((serveroverlayIP, serveroverlay))
         print "Connected!"
+        tcp_sock_list.append(p)
+        k = threading.Thread(target=handle_TCP_incoming, args=(p, handler, f,))
+        k.setDaemon(True)
+        k.start()
 
-
+    r = threading.Thread(target=handle_TCP_outgoing, args=(o, handler,f,))
+    r.setDaemon(True)
+    r.start()
 
     try:
         count = 0
         while (True):
             count += 1
 
-            r=threading.Thread(target=receive_TCP, args=(o,))
-            r.setDaemon(True)
-            r.start()
+
 
             print "pre UDP"
             data, client_address = s.recvfrom(1024)
