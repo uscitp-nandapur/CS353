@@ -62,11 +62,11 @@ if __name__ == "__main__":
             t.setDaemon(True)
             t.start()
             user_input = str(raw_input(''))
-            f.write(user_input + '\n')
             if (user_input == 'exit'):
                 input = False
                 t._Thread__stop()
             else:
+                f.write(user_input + '\n')
                 sock.sendto(user_input, server_address)
                 #data, server_detail = sock.recvfrom(1024)
 
