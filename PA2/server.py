@@ -15,24 +15,10 @@ user_map = {
 }
 tcp_sock_list = []
 
-def route_message_with_spawn(sender, receiver, message, fi, handler, socks, registrar):
-    registrar.send("sendto " + receiver + " from " + sender + ' ' + message)
+def route_message_with_spawn(sender, receiver, message, fi, handler, socks, registrar, s_port):
+    registrar.send(str(s_port) + " sendto " + receiver + " from " + sender + ' ' + message)
 
 def route_message(sender, receiver, message, fi, handler, socks):
-    # if handler == 1:
-    #     #spawn new user
-    #     if receiver not in user_map:
-    #         print receiver + " not registered with server, spawning " + receiver
-    #         new_logfile = "spawned_" + receiver + ".txt"
-    #         send_subp(new_logfile, receiver)
-    #     #continue sending
-    #     time.sleep(1)
-    #     new_sock = user_map[receiver][0]
-    #     new_message = "recvfrom " + sender + " " + message
-    #     ca = user_map[receiver][1]
-    #     fi.write("recvfrom " + sender + " to" + " " + receiver + " " + message + '\n')
-    #     new_sock.sendto(new_message, ca)
-    # else:
     if receiver not in user_map:
         fi.write(receiver + " not registered with the server." + '\n')
         fi.write("sending message to server overlay " + message + '\n')
@@ -45,13 +31,13 @@ def route_message(sender, receiver, message, fi, handler, socks):
         new_sock.sendto(new_message, ca)
 
 
-def send_subp(logfile_, name_):
+def send_subp(logfile_, name_, s_port):
     proc = subprocess.Popen(
-        ["python", "client.py", "-s", "localhost", "-p", "12345", "-l", logfile_, "-n", name_])
+        ["python", "client.py", "-s", "localhost", "-p", s_port, "-l", logfile_, "-n", name_])
 
 
 # thread fuction
-def spawn_thread(c, d, ca, file,handler,registrar):
+def spawn_thread(c, d, ca, file,handler,registrar,s_port):
     # vars
     port = ca[1]
     name = str(d).split(" ")[1]
@@ -76,7 +62,7 @@ def spawn_thread(c, d, ca, file,handler,registrar):
             message = str(d).split(" ")[2:]
             file.write(str(d).split(" ")[0] + " " + id + " from " + name + " " + ' '.join(message) + '\n')
             if (handler == 1):
-                route_message_with_spawn(name, id, ' '.join(message), file, handler, tcp_sock_list, registrar)
+                route_message_with_spawn(name, id, ' '.join(message), file, handler, tcp_sock_list, registrar, s_port)
             else:
                 route_message(name, id, ' '.join(message), file, handler, tcp_sock_list)
 
@@ -93,40 +79,51 @@ def handle_TCP_outgoing(sock, handler,_file):
     print "server joined overlay host " + str(overlay_address[0]) + " port " + str(overlay_address[1])
     _file.write("server joined overlay host " + str(overlay_address[0]) + " port " + str(overlay_address[1]) + '\n')
     tcp_sock_list.append(connection)
+
     while True:
         data = connection.recv(1024)
         if (data):
             if (str(data).split(" ")[0] == "recvfrom"):
+                new_sock_list = []
                 sender = str(data).split(" ")[1]
                 receiver = str(data).split(" ")[3]
                 message = str(data).split(" ")[4:]
                 _file.write("sendto " + receiver + " from " + sender + " " + ' '.join(message) + '\n')
                 #file.write(str(d).split(" ")[0] + " " + id + " from " + name + " " + ' '.join(message) + '\n')
-                route_message(sender, receiver, ' '.join(message), _file, handler, tcp_sock_list)
+                for s in tcp_sock_list:
+                    if (s!=connection):
+                        new_sock_list.append(s)
+                route_message(sender, receiver, ' '.join(message), _file, handler, new_sock_list)
 
 
 def handle_TCP_incoming(sock, handler,_file):
+
     while True:
         data = sock.recv(1024)
         if (data):
             if (str(data).split(" ")[0] == "recvfrom"):
+                new_sock_list = []
                 sender = str(data).split(" ")[1]
                 receiver = str(data).split(" ")[3]
                 message = str(data).split(" ")[4:]
                 # file.write(str(d).split(" ")[0] + " " + id + " from " + name + " " + ' '.join(message) + '\n')
-                route_message(sender, receiver, ' '.join(message), _file, handler, tcp_sock_list)
+                for s in tcp_sock_list:
+                    if (s!=sock):
+                        new_sock_list.append(s)
+                route_message(sender, receiver, ' '.join(message), _file, handler, new_sock_list)
 
 def handle_registrar(sock, h, _file):
     while True:
         data = sock.recv(1024)
         if (data):
-            receiver = str(data).split(" ")[2]
-            sender = str(data).split(" ")[4]
-            message = str(data).split(" ")[5:]
+            s_port= str(data).split(" ")[1]
+            receiver = str(data).split(" ")[3]
+            sender = str(data).split(" ")[5]
+            message = str(data).split(" ")[6:]
             if (str(data).split(" ")[0] == "spawn"):
                 print receiver + " not registered with server, spawning " + receiver
                 new_logfile = "spawned_" + receiver + ".txt"
-                send_subp(new_logfile, receiver)
+                send_subp(new_logfile, receiver, s_port)
                 time.sleep(1)
             route_message(sender, receiver, ' '.join(message), _file, h, tcp_sock_list)
 
@@ -233,7 +230,7 @@ def Main():
 
             #start thread
             t = threading.Thread(target=spawn_thread, name=(str(data).split(" ")[1]),
-                                 args=(tempsocket, data, client_address, f, handler,reg,))
+                                 args=(tempsocket, data, client_address, f, handler,reg,port,))
             t.setDaemon(True)
             t.start()
     except:

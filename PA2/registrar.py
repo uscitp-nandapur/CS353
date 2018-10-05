@@ -18,7 +18,7 @@ def handle_connection(c):
                 user = str(data).split(" ")[2]
                 user_map[user]=c
             else:
-                if (str(data).split(" ")[1] not in user_map):
+                if (str(data).split(" ")[2] not in user_map):
                     c.send("spawn " + str(data))
                 else:
                     c.send("found " + str(data))
