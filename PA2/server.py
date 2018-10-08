@@ -51,7 +51,8 @@ def spawn_thread(c, d, ca, file,handler,registrar,s_port):
 
     #print and write to logfile
     print name, "Registered from host", shortened_hostname, "port", port
-    registrar.send("received register " + name + " from host " + shortened_hostname + " port " + str(port))
+    if(handler==1):
+        registrar.send("received register " + name + " from host " + shortened_hostname + " port " + str(port))
     file.write(
        "received register " + name + " from host " + shortened_hostname + " port " + str(port) + '\n')
 
@@ -121,7 +122,10 @@ def handle_registrar(sock, h, _file):
             sender = str(data).split(" ")[5]
             message = str(data).split(" ")[6:]
             if (str(data).split(" ")[0] == "spawn"):
+                _file.write(receiver + " not registered with the server" + '\n')
+                _file.write("sending message to server overlay " + message + '\n')
                 print receiver + " not registered with server, spawning " + receiver
+                _file.write("received spawn client from registrar" + '\n')
                 new_logfile = "spawned_" + receiver + ".txt"
                 send_subp(new_logfile, receiver, s_port)
                 time.sleep(1)
