@@ -9,15 +9,15 @@ import time
 icmp_echo_req = 8
 
 #structure from resource in PDF (pklaus)
-def checksum(in_str):
+def checksum(in_str, _file):
 
     total = 0
     midpt = (len(in_str) / 2) * 2
     count = 0
-
+    _file.write("Entering Checksum Calc" + '\n')
     b_size=256
     while count < midpt:
-        current = ord(in_str[count + 1])*b_size+ord(in_str[count])
+        current = ord(in_str[count]) + ord(in_str[count + 1])*b_size
         total = total + current
         total = total & 0xffffffff
         count = count + 2
@@ -29,6 +29,7 @@ def checksum(in_str):
     answer = ~total
     answer = answer & 0xffff
     answer = answer >> 8 | (answer << 8 & 0xff00)
+    _file.write("Answer = " + '\n')
     return answer
 
 def utf8len(s):
@@ -42,26 +43,29 @@ def utf8len(s):
 #     data = struct.pack("d", time.time()) + data
 #     _checksum = checksum(pheader + data)
 
-def incoming_ping(my_socket, id, timeout):
-    time_left = timeout
+def incoming_ping(my_socket, id, timeout, _f):
+    remaining = timeout
     while True:
         #Get time now
         starttime = time.time()
 
+        _f.write("Start time was" + str(starttime) + '\n')
 
-        what_ready = select.select([my_socket], [], [], time_left)
-        how_long_in_select = (time.time() - starttime)
-        if what_ready[0] == []:
-            return
+        time_rd = select.select([my_socket], [], [], remaining)
+        time_pending = (time.time() - starttime)
+        if time_rd[0] == []:
+            return 0
 
-        time_received = time.time()
+        _received = time.time()
         received_packet, addr = my_socket.recvfrom(1024)
+
+        _f.write("Received at " + str(_received) + '\n')
 
         #IP Portion
         ipHeader = received_packet[:20]
 
-        ipVersion, ipTypeOfSvc, ipLength, ipID, ipFlags, ipTTL, \
-        ipProtocol, ipChecksum, ipSrcIP, ipDestIP = struct.unpack(
+        Version, TypeOfSvc, Length, ID, Flags, ipTTL, \
+        Protocol, Checksum, SrcIP, DestIP = struct.unpack(
             "!BBHHHBBHII", ipHeader)
 
         #ICMP Portion
@@ -72,13 +76,14 @@ def incoming_ping(my_socket, id, timeout):
         if packet_id == id:
             bytes = struct.calcsize("d")
             time_sent = struct.unpack("d", received_packet[28:28 + bytes])[0]
-            return (time_received - time_sent), ipTTL
+            elapsed = _received - time_sent
+            return elapsed, ipTTL
 
-        time_left = time_left - how_long_in_select
-        if time_left <= 0:
-            return
+        remaining = remaining - time_pending
+        if remaining <= 0:
+            return "Error"
 
-def send_a_ping(dest_addr, timeout, pack_size):
+def send_a_ping(dest_addr, timeout, pack_size, _f):
 
     #Get protocol: ICMP Being used
     icmp = socket.getprotobyname("icmp")
@@ -98,9 +103,11 @@ def send_a_ping(dest_addr, timeout, pack_size):
     _checksum = 0
     pheader = struct.pack("bbHHh", icmp_echo_req, 0, _checksum, my_id, 1)
     size = struct.calcsize("d")
+
+    #Allocate Space for Payload
     data = 256 * "Q"
     data = struct.pack("d", time.time()) + data
-    _checksum = checksum(pheader + data)
+    _checksum = checksum(pheader + data, _f)
     nheader = struct.pack(
         "bbHHh", icmp_echo_req, 0, socket.htons(_checksum), my_id, 1
     )
@@ -110,7 +117,7 @@ def send_a_ping(dest_addr, timeout, pack_size):
     my_socket.sendto(packet, (dest, 23))
 
 
-    delay, TTL = incoming_ping(my_socket, my_id, timeout)
+    delay, TTL = incoming_ping(my_socket, my_id, timeout, _f)
 
     my_socket.close()
     return delay, TTL
@@ -125,22 +132,23 @@ def display_delay_statistics(delay_array,count):
     med=median(delay_array)
     return min_delay, max_delay, med
 
-def median(lst):
-    n = len(lst)
+def median(_list):
+    n = len(_list)
     if n < 1:
             return None
     if n % 2 == 1:
-            return sorted(lst)[n//2]
+            return sorted(_list)[n//2]
     else:
-            return sum(sorted(lst)[n//2-1:n//2+1])/2.0
+            return sum(sorted(_list)[n//2-1:n//2+1])/2.0
 
-def multi_ping(dest_addr, timeout, count, psize):
+def multi_ping(dest_addr, timeout, count, psize, _f):
     delays = []
     icount = 0
     for i in xrange(count):
         print "reply from " + dest_addr + ":",
+        _f.write("Receiving Reply")
         try:
-            delay, TTL  =  send_a_ping(dest_addr, timeout, psize)
+            delay, TTL  =  send_a_ping(dest_addr, timeout, psize, _f)
         except socket.gaierror, e:
             print "failed"
             break
@@ -178,9 +186,10 @@ def Main():
     dest=args.IP
     logfile = args.logfile
 
+    f=open(logfile, "w+")
     bytes=utf8len(payload)
     print "Pinging " + dest + " " "with " + str(bytes) + " bytes of data " + payload + ":"
-    multi_ping(dest, 2, count, bytes)
+    multi_ping(dest, 2, count, bytes, f)
 
 
 if __name__ == '__main__':
