@@ -17,11 +17,12 @@ def median(_list):
     else:
             return sum(sorted(_list)[n//2-1:n//2+1])/2.0
 
-#Structure from resource in PDF (pklaus)
+#With assistance from resource in PDF (pklaus)
+#https://gist.github.com/pklaus/856268
 def checksum(in_str, _file):
 
     total = 0
-    midpt = (len(in_str) / 2) * 2
+    midpt = (len(in_str)/2)*2
     count = 0
     _file.write("Entering Checksum Calc" + '\n')
     b_size=256
@@ -66,21 +67,20 @@ def utf8len(s):
 #     data = struct.pack("d", time.time()) + data
 #     _checksum = checksum(pheader + data)
 
-def incoming_ping(my_socket, id, timeout, _f):
-    remaining = timeout
+def incoming_ping(mysock, id, t_o, _f):
     while True:
         #Get time now
         starttime = time.time()
 
-        _f.write("Start time was" + str(starttime) + '\n')
+        _f.write("Start time was " + str(starttime) + '\n')
 
-        time_rd = select.select([my_socket], [], [], remaining)
-        time_pending = (time.time() - starttime)
+        time_rd = select.select([mysock], [], [], t_o)
+        time_pending = time.time() - starttime
         if time_rd[0] == []:
             return 0
 
         _received = time.time()
-        received_packet, addr = my_socket.recvfrom(1024)
+        received_packet, addr = mysock.recvfrom(1024)
 
         _f.write("Received at " + str(_received) + '\n')
 
@@ -99,10 +99,12 @@ def incoming_ping(my_socket, id, timeout, _f):
         if packet_id == id:
             bytes = struct.calcsize("d")
             time_sent = struct.unpack("d", received_packet[28:28 + bytes])[0]
+
+            #find time difference
             elapsed = _received - time_sent
             return elapsed, ipTTL
-        remaining = remaining - time_pending
-        if remaining <= 0:
+        t_o = t_o - time_pending
+        if t_o <= 0:
             return "Error"
 
 def send_a_ping(dest_addr, timeout, pack_size, _f):
@@ -120,7 +122,6 @@ def send_a_ping(dest_addr, timeout, pack_size, _f):
     my_id = os.getpid() & 0xFFFF
 
     dest = socket.gethostbyname(dest_addr)
-    nh_size = pack_size - 8
 
     _checksum = 0
     pheader = struct.pack("bbHHh", icmp_echo_req, 0, _checksum, my_id, 1)
@@ -139,7 +140,7 @@ def send_a_ping(dest_addr, timeout, pack_size, _f):
     # RAW Socket requires port field, Add dummy port to port field
     mysock.sendto(packet, (dest, 23))
 
-
+    #Get Values for delay and TTL
     delay, TTL = incoming_ping(mysock, my_id, timeout, _f)
 
     mysock.close()
@@ -162,7 +163,7 @@ def multi_ping(dest_addr, timeout, count, psize, _f):
     icount = 0
     for i in xrange(count):
         print "reply from " + dest_addr + ":",
-        _f.write("Receiving Reply")
+        _f.write("Receiving Reply" + '\n')
         try:
             transit_time, TTL  =  send_a_ping(dest_addr, timeout, psize, _f)
         except socket.gaierror, e:
@@ -183,6 +184,7 @@ def multi_ping(dest_addr, timeout, count, psize, _f):
     print "Packets:" + "Sent: " + str(count) + " Received: " + str(icount) + " Lost: " + str(count-icount) \
           + "(" + str(percentage) + '%' + " loss" ")"
     min_d, max_d, avg_d = display_delay_statistics(delays,count)
+    print "Approximate Round Trip Times in Milliseconds: "
     print "Minimum= %.2fms" % min_d + " " + "Maximum= %.2fms" % max_d + " " + "Average= %.2fms" % avg_d
 
 
